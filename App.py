@@ -12,6 +12,7 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 def generate_outreach_email(company_input, persona_input, product_input, tone="Friendly"):
     """
     Generate personalized outreach email using OpenRouter LLM.
+    Returns a dict with 'email' and 'why_this_match_works' (list of strings).
     """
     prompt = f"""
 You are an expert AI Outreach Generator.
@@ -30,13 +31,15 @@ You are an expert AI Outreach Generator.
 - Highly personalized email
 - Include 1 strong CTA
 - Explain why the prospect is a strong match in 3 bullet points
-- Return output in JSON format:
+- Return output clearly in two sections:
 
-JSON FORMAT:
-{{
-  "email": "<personalized outreach email>",
-  "why_this_match_works": ["Reason 1", "Reason 2", "Reason 3"]
-}}
+EMAIL:
+<personalized outreach email>
+
+REASONS:
+- Reason 1
+- Reason 2
+- Reason 3
 """
 
     try:
@@ -57,13 +60,19 @@ JSON FORMAT:
         if response.status_code == 200:
             result = response.json()
             content = result["choices"][0]["message"]["content"]
-            try:
-                return json.loads(content)
-            except:
-                # fallback if LLM returns non-JSON
-                return {"email": content, "why_this_match_works": []}
+
+            # Split email and reasons manually
+            if "EMAIL:" in content and "REASONS:" in content:
+                email_part = content.split("EMAIL:")[1].split("REASONS:")[0].strip()
+                reasons_part = content.split("REASONS:")[1].strip()
+                reasons_list = [r.strip("- ").strip() for r in reasons_part.split("\n") if r.strip()]
+                return {"email": email_part, "why_this_match_works": reasons_list}
+            else:
+                # fallback
+                return {"email": content, "why_this_match_works": ["Reason not generated."]}
         else:
             return {"email": f"OpenRouter API error: {response.status_code}", "why_this_match_works": []}
+
     except Exception as e:
         return {"email": f"Exception occurred: {str(e)}", "why_this_match_works": []}
 
@@ -143,10 +152,15 @@ if st.button("Generate Outreach Email"):
     with st.spinner("Generating email..."):
         result = generate_outreach_email(company_input, persona_input, product_input, tone=tone)
 
-        st.subheader("Generated Outreach Email")
+        # Display email
+        st.subheader("📧 Generated Outreach Email")
         st.text_area("Email", value=result.get("email", ""), height=200)
 
-        st.subheader("Why This Match Works")
+        # Display reasons clearly
+        st.subheader("✅ Why This Match Works")
         reasons = result.get("why_this_match_works", [])
-        for r in reasons:
-            st.write(f"- {r}")
+        if reasons:
+            for idx, r in enumerate(reasons, start=1):
+                st.write(f"{idx}. {r}")
+        else:
+            st.write("No reasons generated.")
