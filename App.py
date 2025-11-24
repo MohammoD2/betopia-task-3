@@ -78,7 +78,7 @@ REASONS:
 
 # ------------------- STREAMLIT UI -------------------
 st.set_page_config(page_title="AI Outreach Generator", layout="wide")
-st.title("AI Outreach Generator for Betopia Interview Task")
+st.title("AI Outreach Generator")
 
 st.write("This app generates a personalized outreach email for Betopia based on the input data.")
 
