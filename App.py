@@ -1,20 +1,77 @@
 import streamlit as st
-from outreach_generator import OutreachGenerator  # import your backend
 import os
-from dotenv import load_dotenv
-
-# Load .env file
-load_dotenv()
+import requests
+import json
 
 # ------------------- CONFIG -------------------
-OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]
-generator = OutreachGenerator(api_key=OPENROUTER_API_KEY)
+OPENROUTER_API_KEY = st.secrets["OPENROUTER_API_KEY"]  # Make sure this is set in your environment
+OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ------------------- STREAMLIT APP -------------------
+# ------------------- HELPER FUNCTION -------------------
+def generate_outreach_email(company_input, persona_input, product_input, tone="Friendly"):
+    """
+    Generate personalized outreach email using OpenRouter LLM.
+    """
+    prompt = f"""
+You are an expert AI Outreach Generator.
+
+### COMPANY PROFILE:
+{company_input}
+
+### PERSONA PROFILE:
+{persona_input}
+
+### PRODUCT DESCRIPTION:
+{product_input}
+
+### REQUIREMENTS:
+- Tone: {tone} (Formal / Friendly / Short / Long)
+- Highly personalized email
+- Include 1 strong CTA
+- Explain why the prospect is a strong match in 3 bullet points
+- Return output in JSON format:
+
+JSON FORMAT:
+{{
+  "email": "<personalized outreach email>",
+  "why_this_match_works": ["Reason 1", "Reason 2", "Reason 3"]
+}}
+"""
+
+    try:
+        response = requests.post(
+            url=OPENROUTER_URL,
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            data=json.dumps({
+                "model": OPENROUTER_MODEL,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+            })
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+            try:
+                return json.loads(content)
+            except:
+                # fallback if LLM returns non-JSON
+                return {"email": content, "why_this_match_works": []}
+        else:
+            return {"email": f"OpenRouter API error: {response.status_code}", "why_this_match_works": []}
+    except Exception as e:
+        return {"email": f"Exception occurred: {str(e)}", "why_this_match_works": []}
+
+# ------------------- STREAMLIT UI -------------------
 st.set_page_config(page_title="AI Outreach Generator", layout="wide")
-st.title("AI Outreach Generator")
+st.title("AI Outreach Generator for Betopia Interview Task")
 
-st.write("Fill all fields below to generate a personalized outreach email.")
+st.write("This app generates a personalized outreach email for Betopia based on the input data.")
 
 # ------------------- COMPANY INPUTS -------------------
 with st.expander("Company Profile", expanded=True):
@@ -79,21 +136,17 @@ Risks it Eliminates: {risks_eliminated}
 """
 
 # ------------------- TONE SELECTION -------------------
-tone = st.selectbox("Select Tone", ["Formal", "Friendly", "Short", "Long"], index=1)  # Default = Friendly
+tone = st.selectbox("Select Tone", ["Formal", "Friendly", "Short", "Long"], index=1)
 
 # ------------------- GENERATE BUTTON -------------------
 if st.button("Generate Outreach Email"):
     with st.spinner("Generating email..."):
-        try:
-            result = generator.generate_outreach(company_input, persona_input, product_input, tone=tone)
+        result = generate_outreach_email(company_input, persona_input, product_input, tone=tone)
 
-            st.subheader("Generated Outreach Email")
-            st.text_area("Email", value=result.get("email", ""), height=200)
+        st.subheader("Generated Outreach Email")
+        st.text_area("Email", value=result.get("email", ""), height=200)
 
-            st.subheader("Why This Match Works")
-            reasons = result.get("why_this_match_works", [])
-            for r in reasons:
-                st.write(f"- {r}")
-
-        except Exception as e:
-            st.error(f"Error generating email: {e}")
+        st.subheader("Why This Match Works")
+        reasons = result.get("why_this_match_works", [])
+        for r in reasons:
+            st.write(f"- {r}")
